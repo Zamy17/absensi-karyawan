@@ -1,107 +1,120 @@
-import { format, parse, isWithinInterval, addMinutes, differenceInMinutes } from 'date-fns';
+// src/utils/dateUtils.js
 
-/**
- * Get the current date in YYYY-MM-DD format
- * @returns {string} - Formatted date
- */
-export const getCurrentDate = () => {
-  return format(new Date(), 'yyyy-MM-dd');
-};
-
-/**
- * Get the current time in HH:mm format
- * @returns {string} - Formatted time
- */
-export const getCurrentTime = () => {
-  return format(new Date(), 'HH:mm');
-};
-
-/**
- * Check if the current time is within the security confirmation window (06:00 - 09:00)
- * @returns {boolean} - True if within the confirmation window
- */
-export const isWithinSecurityConfirmationHours = () => {
-  const now = new Date();
-  const sixAM = new Date(now.getFullYear(), now.getMonth(), now.getDate(), 6, 0);
-  const nineAM = new Date(now.getFullYear(), now.getMonth(), now.getDate(), 9, 0);
+// Format date as YYYY-MM-DD
+export const formatDate = (date) => {
+    const d = new Date(date);
+    return d.toISOString().split('T')[0];
+  };
   
-  return isWithinInterval(now, { start: sixAM, end: nineAM });
-};
-
-/**
- * Check if employee can check out (after 17:00)
- * @returns {boolean} - True if check-out is allowed
- */
-export const canCheckOut = () => {
-  const now = new Date();
-  const fivePM = new Date(now.getFullYear(), now.getMonth(), now.getDate(), 17, 0);
+  // Format time as HH:MM
+  export const formatTime = (date) => {
+    const d = new Date(date);
+    return d.toTimeString().split(' ')[0].substring(0, 5);
+  };
   
-  return now >= fivePM;
-};
-
-/**
- * Determine attendance status based on check-in time
- * @param {string} checkInTime - Check-in time in HH:mm format
- * @returns {string} - Attendance status
- */
-export const getAttendanceStatus = (checkInTime) => {
-  const timeObj = parse(checkInTime, 'HH:mm', new Date());
-  const standardTime = new Date(timeObj.getFullYear(), timeObj.getMonth(), timeObj.getDate(), 8, 0);
-  const toleranceTime = addMinutes(standardTime, 10);
-  const lateThreshold = addMinutes(standardTime, 30);
+  // Get current date formatted as YYYY-MM-DD
+  export const getCurrentDate = () => {
+    return formatDate(new Date());
+  };
   
-  if (timeObj <= toleranceTime) {
-    return 'On Time';
-  } else if (timeObj <= lateThreshold) {
-    return 'Late';
-  } else {
-    return 'Very Late';
-  }
-};
-
-/**
- * Calculate work duration between check-in and check-out times
- * @param {string} checkInTime - Check-in time in HH:mm format
- * @param {string} checkOutTime - Check-out time in HH:mm format
- * @returns {string} - Formatted duration
- */
-export const calculateWorkDuration = (checkInTime, checkOutTime) => {
-  const checkIn = parse(checkInTime, 'HH:mm', new Date());
-  const checkOut = parse(checkOutTime, 'HH:mm', new Date());
+  // Get current time formatted as HH:MM:SS
+  export const getCurrentTime = () => {
+    return new Date().toTimeString().split(' ')[0];
+  };
   
-  // If check-out is before check-in, assume it's the next day
-  let adjustedCheckOut = checkOut;
-  if (checkOut < checkIn) {
-    adjustedCheckOut = new Date(
-      checkOut.getFullYear(),
-      checkOut.getMonth(),
-      checkOut.getDate() + 1,
-      checkOut.getHours(),
-      checkOut.getMinutes()
+  // Check if the current time is within check-in hours (06:00 - 09:00)
+  export const isWithinCheckInHours = () => {
+    const now = new Date();
+    const hours = now.getHours();
+    return hours >= 6 && hours < 9;
+  };
+  
+  // Check if the current time is within check-out hours (17:00 - 23:00)
+  export const isWithinCheckOutHours = () => {
+    const now = new Date();
+    const hours = now.getHours();
+    return hours >= 17 && hours < 23;
+  };
+  
+  // Check if today is a workday (not weekend)
+  export const isWorkday = () => {
+    const now = new Date();
+    const day = now.getDay(); // 0 is Sunday, 6 is Saturday
+    return day !== 0 && day !== 6;
+  };
+  
+  // Get first day of current month
+  export const getFirstDayOfMonth = () => {
+    const now = new Date();
+    return formatDate(new Date(now.getFullYear(), now.getMonth(), 1));
+  };
+  
+  // Get last day of current month
+  export const getLastDayOfMonth = () => {
+    const now = new Date();
+    return formatDate(new Date(now.getFullYear(), now.getMonth() + 1, 0));
+  };
+  
+  // Get month name from month number (1-12)
+  export const getMonthName = (monthNumber) => {
+    const months = [
+      'January', 'February', 'March', 'April', 'May', 'June',
+      'July', 'August', 'September', 'October', 'November', 'December'
+    ];
+    return months[monthNumber - 1];
+  };
+  
+  // Get number of working days in a month (exclude weekends)
+  export const getWorkingDaysInMonth = (year, month) => {
+    // month is 1-12
+    const startDate = new Date(year, month - 1, 1);
+    const endDate = new Date(year, month, 0);
+    let count = 0;
+    
+    for (let day = new Date(startDate); day <= endDate; day.setDate(day.getDate() + 1)) {
+      const dayOfWeek = day.getDay();
+      if (dayOfWeek !== 0 && dayOfWeek !== 6) { // 0 is Sunday, 6 is Saturday
+        count++;
+      }
+    }
+    
+    return count;
+  };
+  
+  // Check if a date is in the past
+  export const isPastDate = (dateString) => {
+    const inputDate = new Date(dateString);
+    const today = new Date();
+    today.setHours(0, 0, 0, 0);
+    return inputDate < today;
+  };
+  
+  // Check if a date is today
+  export const isToday = (dateString) => {
+    const inputDate = new Date(dateString);
+    const today = new Date();
+    
+    return (
+      inputDate.getDate() === today.getDate() &&
+      inputDate.getMonth() === today.getMonth() &&
+      inputDate.getFullYear() === today.getFullYear()
     );
-  }
+  };
   
-  const minutes = differenceInMinutes(adjustedCheckOut, checkIn);
-  const hours = Math.floor(minutes / 60);
-  const remainingMinutes = minutes % 60;
-  
-  return `${hours} hours ${remainingMinutes} minutes`;
-};
-
-/**
- * Format a date for display
- * @param {string} dateString - Date in YYYY-MM-DD format
- * @returns {string} - Formatted date for display
- */
-export const formatDateForDisplay = (dateString) => {
-  const date = parse(dateString, 'yyyy-MM-dd', new Date());
-  return format(date, 'MMMM d, yyyy');
-};
-
-/**
- * Get the current month in YYYY-MM format
- * @returns {string} - Current month
- */
-export const getCurrentMonth = () => {
-  return format(new Date(), 'yyyy-MM');
-};
+  // Calculate attendance status based on check-in time
+  export const calculateAttendanceStatus = (checkInTime) => {
+    if (!checkInTime) return "Tidak Hadir";
+    
+    const [hours, minutes] = checkInTime.split(':').map(Number);
+    const totalMinutes = hours * 60 + minutes;
+    
+    // 08:10 in minutes = 490 minutes
+    // 08:30 in minutes = 510 minutes
+    if (totalMinutes <= 490) {
+      return "Tepat Waktu";
+    } else if (totalMinutes <= 510) {
+      return "Terlambat";
+    } else {
+      return "Sangat Terlambat";
+    }
+  };

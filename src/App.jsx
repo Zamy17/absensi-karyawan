@@ -1,130 +1,57 @@
+// src/App.jsx
 import React from 'react';
 import { BrowserRouter as Router, Routes, Route, Navigate } from 'react-router-dom';
-import { AuthProvider, useAuth } from './contexts/AuthContext';
+import { AuthProvider } from './contexts/AuthContext';
+
+// Auth components
 import Login from './components/auth/Login';
-import Header from './components/common/Header';
-import Footer from './components/common/Footer';
+import ProtectedRoute from './components/auth/ProtectedRoute';
 
-// Import employee components (to be created later)
-import EmployeeDashboard from './components/attendance/EmployeeDashboard';
-import CheckIn from './components/attendance/CheckIn';
-import CheckOut from './components/attendance/CheckOut';
-import AttendanceHistory from './components/attendance/AttendanceHistory';
-import LeaveRequest from './components/leave/LeaveRequest';
+// Admin components
+import AdminDashboard from './components/admin/Dashboard';
+import EmployeeManagement from './components/admin/EmployeeManagement';
+import GuardManagement from './components/admin/GuardManagement';
+import AttendanceReport from './components/admin/AttendanceReport';
+import TopEmployees from './components/admin/TopEmployees';
 
-// Import security components (to be created later)
-import SecurityDashboard from './components/security/SecurityDashboard';
-import ConfirmAttendance from './components/security/ConfirmAttendance';
-import LeaveApproval from './components/leave/LeaveApproval';
+// Guard components
+import GuardDashboard from './components/guard/Dashboard';
+import CheckInAttendance from './components/guard/CheckInAttendance';
+import CheckOutAttendance from './components/guard/CheckOutAttendance';
+import DailyReport from './components/guard/DailyReport';
 
-// Protected route wrapper
-const ProtectedRoute = ({ children, requiredRole }) => {
-  const { currentUser } = useAuth();
-  
-  if (!currentUser) {
-    return <Navigate to="/" replace />;
-  }
-  
-  if (requiredRole && currentUser.role !== requiredRole) {
-    return <Navigate to={currentUser.role === 'Security' ? '/security-dashboard' : '/employee-dashboard'} replace />;
-  }
-  
-  return children;
-};
-
-// Main layout wrapper with header and footer
-const MainLayout = ({ children }) => {
+function App() {
   return (
-    <div className="flex flex-col min-h-screen">
-      <Header />
-      <main className="flex-grow container mx-auto px-4 py-8">
-        {children}
-      </main>
-      <Footer />
-    </div>
-  );
-};
-
-const App = () => {
-  return (
-    <AuthProvider>
-      <Router>
+    <Router>
+      <AuthProvider>
         <Routes>
-          {/* Public route */}
-          <Route path="/" element={<Login />} />
+          {/* Public routes */}
+          <Route path="/login" element={<Login />} />
+          <Route path="/" element={<Navigate to="/login" replace />} />
           
-          {/* Employee routes */}
-          <Route path="/employee-dashboard" element={
-            <ProtectedRoute requiredRole="Employee">
-              <MainLayout>
-                <EmployeeDashboard />
-              </MainLayout>
-            </ProtectedRoute>
-          } />
+          {/* Admin routes */}
+          <Route element={<ProtectedRoute requiredRole="admin" />}>
+            <Route path="/admin/dashboard" element={<AdminDashboard />} />
+            <Route path="/admin/employees" element={<EmployeeManagement />} />
+            <Route path="/admin/guards" element={<GuardManagement />} />
+            <Route path="/admin/attendance" element={<AttendanceReport />} />
+            <Route path="/admin/top-employees" element={<TopEmployees />} />
+          </Route>
           
-          <Route path="/check-in" element={
-            <ProtectedRoute requiredRole="Employee">
-              <MainLayout>
-                <CheckIn />
-              </MainLayout>
-            </ProtectedRoute>
-          } />
+          {/* Guard routes */}
+          <Route element={<ProtectedRoute requiredRole="guard" />}>
+            <Route path="/guard/dashboard" element={<GuardDashboard />} />
+            <Route path="/guard/check-in" element={<CheckInAttendance />} />
+            <Route path="/guard/check-out" element={<CheckOutAttendance />} />
+            <Route path="/guard/daily-report" element={<DailyReport />} />
+          </Route>
           
-          <Route path="/check-out" element={
-            <ProtectedRoute requiredRole="Employee">
-              <MainLayout>
-                <CheckOut />
-              </MainLayout>
-            </ProtectedRoute>
-          } />
-          
-          <Route path="/attendance-history" element={
-            <ProtectedRoute requiredRole="Employee">
-              <MainLayout>
-                <AttendanceHistory />
-              </MainLayout>
-            </ProtectedRoute>
-          } />
-          
-          <Route path="/leave-request" element={
-            <ProtectedRoute requiredRole="Employee">
-              <MainLayout>
-                <LeaveRequest />
-              </MainLayout>
-            </ProtectedRoute>
-          } />
-          
-          {/* Security routes */}
-          <Route path="/security-dashboard" element={
-            <ProtectedRoute requiredRole="Security">
-              <MainLayout>
-                <SecurityDashboard />
-              </MainLayout>
-            </ProtectedRoute>
-          } />
-          
-          <Route path="/confirm-attendance" element={
-            <ProtectedRoute requiredRole="Security">
-              <MainLayout>
-                <ConfirmAttendance />
-              </MainLayout>
-            </ProtectedRoute>
-          } />
-          
-          <Route path="/leave-approvals" element={
-            <ProtectedRoute requiredRole="Security">
-              <MainLayout>
-                <LeaveApproval />
-              </MainLayout>
-            </ProtectedRoute>
-          } />
-          
-          {/* Catch-all redirect */}
-          <Route path="*" element={<Navigate to="/" replace />} />
+          {/* Fallback route */}
+          <Route path="*" element={<Navigate to="/login" replace />} />
         </Routes>
-      </Router>
-    </AuthProvider>
+      </AuthProvider>
+    </Router>
   );
-};
+}
 
 export default App;
