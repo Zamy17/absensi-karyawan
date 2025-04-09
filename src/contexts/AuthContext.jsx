@@ -8,21 +8,6 @@ export const useAuth = () => {
   return useContext(AuthContext);
 };
 
-// Helper function to determine role from email
-const getRoleFromEmail = (email) => {
-  if (!email) return "user";
-  
-  email = email.toLowerCase();
-  
-  if (email.includes("admin")) {
-    return "admin";
-  } else if (email.includes("satpam") || email.includes("guard")) {
-    return "guard";
-  } else {
-    return "user";
-  }
-};
-
 export const AuthProvider = ({ children }) => {
   const [currentUser, setCurrentUser] = useState(null);
   const [userRole, setUserRole] = useState(null);
@@ -38,22 +23,20 @@ export const AuthProvider = ({ children }) => {
         
         if (user) {
           try {
-            console.log("Getting role for current user:", user.uid);
             const role = await getUserRole(user.uid);
-            console.log("User role determined:", role);
+            console.log("Peran ditentukan:", role);
             setUserRole(role);
           } catch (roleError) {
-            console.error("Error getting user role in AuthContext:", roleError);
-            // Fall back to email-based role determination
-            const fallbackRole = getRoleFromEmail(user.email);
-            console.log("Using fallback role based on email:", fallbackRole);
-            setUserRole(fallbackRole);
+            console.error("Error mendapatkan peran pengguna:", roleError);
+            // Tetap lanjutkan dan tampilkan UI meskipun pengambilan peran gagal
+            // Default ke null role yang akan mengarahkan ke halaman login
+            setUserRole(null);
           }
         } else {
           setUserRole(null);
         }
       } catch (err) {
-        console.error("Auth context error:", err);
+        console.error("Error konteks Auth:", err);
         setError(err.message);
       } finally {
         setLoading(false);
@@ -64,32 +47,18 @@ export const AuthProvider = ({ children }) => {
   }, []);
 
   const login = async (email, password) => {
-    console.log("Login attempt for:", email);
     try {
       setError(null);
-      const user = await signIn(email, password);
-      console.log("User signed in:", user.uid);
-      setCurrentUser(user);
+      console.log("Upaya login untuk:", email);
+      const { user, role } = await signIn(email, password);
+      console.log("Pengguna berhasil masuk:", user.uid);
+      console.log("Peran ditentukan:", role);
       
-      if (user) {
-        try {
-          console.log("Getting role after login for:", user.uid);
-          const role = await getUserRole(user.uid);
-          console.log("Role determined:", role);
-          setUserRole(role);
-          return { user, role };
-        } catch (roleError) {
-          console.error("Error getting user role after login:", roleError);
-          
-          // Use email-based role detection
-          const fallbackRole = getRoleFromEmail(email);
-          console.log("Using fallback role based on email:", fallbackRole);
-          setUserRole(fallbackRole);
-          return { user, role: fallbackRole };
-        }
-      }
+      setCurrentUser(user);
+      setUserRole(role);
+      return { user, role };
     } catch (err) {
-      console.error("Login error:", err);
+      console.error("Error login:", err);
       setError(err.message);
       throw err;
     }
@@ -102,6 +71,7 @@ export const AuthProvider = ({ children }) => {
       setCurrentUser(null);
       setUserRole(null);
     } catch (err) {
+      console.error("Error logout:", err);
       setError(err.message);
       throw err;
     }

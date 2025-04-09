@@ -1,12 +1,14 @@
-// src/components/guard/CheckOutAttendance.jsx
-import React, { useState, useEffect } from 'react';
+// src/components/guard/CheckOutAttendance.jsx (Optimized for mobile)
+import React, { useState, useEffect, useRef } from 'react';
 import { useAuth } from '../../contexts/AuthContext';
-import { getEmployees, getAttendanceByDate, recordCheckOut } from '../../firebase/firestore';
-import { getCurrentDate, getCurrentTime, isWithinCheckOutHours, isWorkday } from '../../utils/dateUtils';
+import { getEmployees, recordCheckOut } from '../../firebase/firestore';
+import { getCurrentDate, getCurrentTime, isWithinCheckOutHours } from '../../utils/dateUtils';
 import { canCheckOut } from '../../utils/attendanceHelpers';
 import Layout from '../layout/Layout';
 import Button from '../shared/Button';
 import Modal from '../shared/Modal';
+import { collection, query, where, onSnapshot } from 'firebase/firestore';
+import { db } from '../../firebase/config';
 
 const CheckOutAttendance = () => {
   const { currentUser } = useAuth();
@@ -19,33 +21,97 @@ const CheckOutAttendance = () => {
   const [selectedEmployee, setSelectedEmployee] = useState(null);
   const [selectedAttendance, setSelectedAttendance] = useState(null);
   const [confirmationStatus, setConfirmationStatus] = useState('');
+  const [currentDateString, setCurrentDateString] = useState(getCurrentDate());
   
-  // Check if today is a workday and within check-out hours
-  const canRecordAttendance = isWorkday() && isWithinCheckOutHours();
+  // Mobile detection
+  const [isMobile, setIsMobile] = useState(false);
   
   useEffect(() => {
-    const fetchData = async () => {
+    const checkIfMobile = () => {
+      setIsMobile(window.innerWidth < 768);
+    };
+    
+    // Check on initial load
+    checkIfMobile();
+    
+    // Add event listener for window resize
+    window.addEventListener('resize', checkIfMobile);
+    
+    // Cleanup
+    return () => window.removeEventListener('resize', checkIfMobile);
+  }, []);
+  
+  // Store unsubscribe function in a ref
+  const unsubscribeRef = useRef(null);
+  
+  // Check if within check-out hours
+  const canRecordAttendance = isWithinCheckOutHours();
+  
+  // Function to get current date in YYYY-MM-DD format
+  const getUpdatedCurrentDate = () => {
+    const now = new Date();
+    const year = now.getFullYear();
+    const month = String(now.getMonth() + 1).padStart(2, '0');
+    const day = String(now.getDate()).padStart(2, '0');
+    return `${year}-${month}-${day}`;
+  };
+  
+  // Setup real-time listener for attendance data
+  useEffect(() => {
+    const correctDate = getUpdatedCurrentDate();
+    if (currentDateString !== correctDate) {
+      setCurrentDateString(correctDate);
+    }
+    
+    if (unsubscribeRef.current) {
+      unsubscribeRef.current();
+    }
+    
+    setLoading(true);
+    
+    const attendanceQuery = query(
+      collection(db, "attendance"),
+      where("date", "==", currentDateString)
+    );
+    
+    const unsubscribe = onSnapshot(attendanceQuery, (querySnapshot) => {
+      const attendanceData = [];
+      querySnapshot.forEach((doc) => {
+        attendanceData.push({ id: doc.id, ...doc.data() });
+      });
+      
+      setTodayAttendance(attendanceData);
+      setLoading(false);
+    }, (error) => {
+      console.error("Error setting up real-time listener:", error);
+      setLoading(false);
+    });
+    
+    unsubscribeRef.current = unsubscribe;
+    
+    return () => {
+      if (unsubscribeRef.current) {
+        unsubscribeRef.current();
+      }
+    };
+  }, [currentUser, currentDateString]);
+  
+  // Fetch employees data
+  useEffect(() => {
+    const fetchEmployees = async () => {
+      if (!currentUser) return;
+      
       try {
-        setLoading(true);
-        
-        // Get all employees
         const employeesData = await getEmployees();
         setEmployees(employeesData);
         setFilteredEmployees(employeesData);
-        
-        // Get today's attendance
-        const today = getCurrentDate();
-        const attendanceData = await getAttendanceByDate(today);
-        setTodayAttendance(attendanceData);
       } catch (error) {
-        console.error("Error fetching data:", error);
-      } finally {
-        setLoading(false);
+        console.error("Error fetching employees:", error);
       }
     };
     
-    fetchData();
-  }, []);
+    fetchEmployees();
+  }, [currentUser]);
   
   // Filter employees based on search term
   useEffect(() => {
@@ -63,6 +129,7 @@ const CheckOutAttendance = () => {
   const handleSelectEmployee = (employee) => {
     if (!canRecordAttendance) return;
     
+    // Check if employee can check out
     const checkOutStatus = canCheckOut(employee, todayAttendance);
     
     if (checkOutStatus.canCheckOut) {
@@ -82,19 +149,20 @@ const CheckOutAttendance = () => {
   // Handle check-out confirmation
   const handleConfirmCheckOut = async () => {
     try {
-      if (!selectedEmployee) return;
+      if (!selectedEmployee || !currentUser) return;
+      
+      // Do one final check before submitting
+      const checkOutStatus = canCheckOut(selectedEmployee, todayAttendance);
+      if (!checkOutStatus.canCheckOut) {
+        alert(checkOutStatus.message);
+        setIsModalOpen(false);
+        return;
+      }
       
       setConfirmationStatus('loading');
       
       // Record check-out
-      const result = await recordCheckOut(selectedEmployee.id, currentUser.uid);
-      
-      // Update today's attendance
-      setTodayAttendance(
-        todayAttendance.map(record => 
-          record.id === result.id ? result : record
-        )
-      );
+      await recordCheckOut(selectedEmployee.id, currentUser.uid);
       
       setConfirmationStatus('success');
       
@@ -104,26 +172,10 @@ const CheckOutAttendance = () => {
         setSelectedEmployee(null);
         setSelectedAttendance(null);
       }, 2000);
+      
     } catch (error) {
       console.error("Error confirming check-out:", error);
       setConfirmationStatus('error');
-    }
-  };
-  
-  // Get attendance status for an employee
-  const getEmployeeAttendanceStatus = (employeeId) => {
-    const record = todayAttendance.find(
-      record => record.employeeId === employeeId
-    );
-    
-    if (!record) {
-      return "Belum Absen";
-    } else if (record.checkInTime && record.checkOutTime) {
-      return `Pulang: ${record.checkOutTime}`;
-    } else if (record.checkInTime) {
-      return `Masuk: ${record.checkInTime}`;
-    } else {
-      return "Belum Absen";
     }
   };
   
@@ -135,22 +187,102 @@ const CheckOutAttendance = () => {
     
     return record && record.checkInTime && !record.checkOutTime;
   };
+  
+  // Get attendance status text
+  const getAttendanceStatusText = (employee) => {
+    const record = todayAttendance.find(
+      record => record.employeeId === employee.id
+    );
+    
+    if (!record) {
+      return "Belum Absen";
+    } else if (record.checkInTime && record.checkOutTime) {
+      return `Sudah Absen Pulang (${record.checkOutTime})`;
+    } else if (record.checkInTime) {
+      return `Masuk: ${record.checkInTime}`;
+    } else {
+      return "Belum Absen";
+    }
+  };
+
+  // Mobile optimized employee list
+  const renderMobileEmployeeList = () => {
+    if (filteredEmployees.length === 0) {
+      return (
+        <div className="bg-white p-6 rounded-lg shadow text-center text-gray-500">
+          {searchTerm ? "Tidak ditemukan karyawan yang sesuai dengan pencarian" : "Belum ada data karyawan"}
+        </div>
+      );
+    }
+    
+    return (
+      <div className="space-y-3">
+        {filteredEmployees.map((employee) => {
+          const canCheckout = canEmployeeCheckOut(employee.id);
+          const statusText = getAttendanceStatusText(employee);
+          const hasCheckedOut = statusText.includes("Sudah Absen Pulang");
+          
+          return (
+            <div 
+              key={employee.id}
+              className={`bg-white rounded-lg shadow p-4 ${
+                hasCheckedOut 
+                  ? 'border-l-4 border-purple-500' 
+                  : canCheckout 
+                    ? 'border-l-4 border-yellow-500' 
+                    : ''
+              }`}
+              onClick={() => canCheckout && handleSelectEmployee(employee)}
+            >
+              <div className="flex justify-between items-center">
+                <div>
+                  <h3 className="font-medium">{employee.name}</h3>
+                  <p className="text-sm text-gray-500">{employee.position}</p>
+                  <p className="text-xs text-gray-500 mt-1">{statusText}</p>
+                </div>
+                <div>
+                  {hasCheckedOut ? (
+                    <span className="inline-flex items-center px-2 py-1 rounded-full text-xs font-medium bg-purple-100 text-purple-800">
+                      Sudah Pulang
+                    </span>
+                  ) : canCheckout ? (
+                    <button
+                      className={`px-3 py-1 rounded-lg text-sm font-medium ${canRecordAttendance ? 'bg-blue-600 text-white' : 'bg-gray-300 text-gray-500'}`}
+                      disabled={!canRecordAttendance}
+                    >
+                      Konfirmasi
+                    </button>
+                  ) : (
+                    <span className="inline-flex items-center px-2 py-1 rounded-full text-xs font-medium bg-gray-100 text-gray-800">
+                      Belum Masuk
+                    </span>
+                  )}
+                </div>
+              </div>
+            </div>
+          );
+        })}
+      </div>
+    );
+  };
 
   return (
     <Layout>
-      <div className="space-y-6">
-        <div>
-          <h1 className="text-2xl font-bold text-gray-900">
-            Konfirmasi Absensi Pulang
-          </h1>
-          <p className="mt-1 text-gray-500">
-            Konfirmasi absensi pulang karyawan (17:00 - 23:00)
-          </p>
-        </div>
+      <div className={`space-y-4 ${isMobile ? 'pb-safe' : ''}`}>
+        {!isMobile && (
+          <div>
+            <h1 className="text-2xl font-bold text-gray-900">
+              Konfirmasi Absensi Pulang
+            </h1>
+            <p className="mt-1 text-gray-500">
+              Konfirmasi absensi pulang karyawan (17:00 - 23:00)
+            </p>
+          </div>
+        )}
         
         {/* Status warning */}
         {!canRecordAttendance && (
-          <div className="bg-yellow-50 border-l-4 border-yellow-400 p-4">
+          <div className="bg-yellow-50 border-l-4 border-yellow-400 p-4 rounded-md">
             <div className="flex">
               <div className="flex-shrink-0">
                 <svg className="h-5 w-5 text-yellow-400" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 20 20" fill="currentColor">
@@ -159,42 +291,44 @@ const CheckOutAttendance = () => {
               </div>
               <div className="ml-3">
                 <p className="text-sm text-yellow-700">
-                  {!isWorkday() 
-                    ? "Hari ini adalah hari libur/akhir pekan. Tidak ada absensi hari ini." 
-                    : "Saat ini di luar jam absensi pulang (17:00 - 23:00)."}
+                  Saat ini di luar jam absensi pulang (17:00 - 23:00).
                 </p>
               </div>
             </div>
           </div>
         )}
         
-        {/* Search box */}
-        <div className="flex flex-col md:flex-row space-y-2 md:space-y-0 md:space-x-4">
-          <div className="relative flex-grow">
-            <input
-              type="text"
-              className="block w-full pl-10 pr-3 py-2 border border-gray-300 rounded-md leading-5 bg-white placeholder-gray-500 focus:outline-none focus:ring-blue-500 focus:border-blue-500 sm:text-sm"
-              placeholder="Cari karyawan..."
-              value={searchTerm}
-              onChange={(e) => setSearchTerm(e.target.value)}
-            />
-            <div className="absolute inset-y-0 left-0 pl-3 flex items-center pointer-events-none">
-              <svg className="h-5 w-5 text-gray-400" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 20 20" fill="currentColor">
-                <path fillRule="evenodd" d="M8 4a4 4 0 100 8 4 4 0 000-8zM2 8a6 6 0 1110.89 3.476l4.817 4.817a1 1 0 01-1.414 1.414l-4.816-4.816A6 6 0 012 8z" clipRule="evenodd" />
-              </svg>
-            </div>
+        {/* Date display */}
+        <div className="flex justify-between items-center">
+          <div className="text-sm font-medium">
+            Data absensi untuk tanggal: <span className="text-blue-600">{currentDateString}</span>
           </div>
-          <div className="text-right text-sm text-gray-500">
-            {getCurrentDate()} - {getCurrentTime()}
+        </div>
+        
+        {/* Search box */}
+        <div className="relative">
+          <input
+            type="text"
+            className="block w-full pl-10 pr-3 py-3 border border-gray-300 rounded-lg shadow-sm placeholder-gray-400 focus:outline-none focus:ring-blue-500 focus:border-blue-500"
+            placeholder="Cari karyawan..."
+            value={searchTerm}
+            onChange={(e) => setSearchTerm(e.target.value)}
+          />
+          <div className="absolute inset-y-0 left-0 pl-3 flex items-center pointer-events-none">
+            <svg className="h-5 w-5 text-gray-400" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 20 20" fill="currentColor">
+              <path fillRule="evenodd" d="M8 4a4 4 0 100 8 4 4 0 000-8zM2 8a6 6 0 1110.89 3.476l4.817 4.817a1 1 0 01-1.414 1.414l-4.816-4.816A6 6 0 012 8z" clipRule="evenodd" />
+            </svg>
           </div>
         </div>
         
         {/* Employee list */}
-        <div className="bg-white shadow-md rounded-lg overflow-hidden">
+        <div className="bg-gray-50 rounded-lg p-4">
           {loading ? (
             <div className="flex justify-center my-12">
               <div className="animate-spin rounded-full h-12 w-12 border-t-2 border-b-2 border-blue-500"></div>
             </div>
+          ) : isMobile ? (
+            renderMobileEmployeeList()
           ) : (
             <div className="overflow-x-auto">
               <table className="min-w-full divide-y divide-gray-200">
@@ -233,7 +367,7 @@ const CheckOutAttendance = () => {
                           {employee.position}
                         </td>
                         <td className="px-6 py-4 whitespace-nowrap">
-                          {getEmployeeAttendanceStatus(employee.id)}
+                          {getAttendanceStatusText(employee)}
                         </td>
                         <td className="px-6 py-4 whitespace-nowrap">
                           <Button
@@ -265,7 +399,7 @@ const CheckOutAttendance = () => {
             }
           }}
           title="Konfirmasi Absensi Pulang"
-          size="sm"
+          size={isMobile ? "full" : "sm"}
         >
           {confirmationStatus === 'loading' ? (
             <div className="flex flex-col items-center justify-center py-6">
@@ -306,7 +440,7 @@ const CheckOutAttendance = () => {
               
               <div className="flex justify-between text-sm text-gray-500 mb-4">
                 <span>Tanggal</span>
-                <span>{getCurrentDate()}</span>
+                <span>{currentDateString}</span>
               </div>
               
               <div className="flex justify-between text-sm text-gray-500 mb-4">

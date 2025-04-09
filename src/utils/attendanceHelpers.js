@@ -1,13 +1,21 @@
 // src/utils/attendanceHelpers.js
-import { getEmployees } from '../firebase/firestore';
+import { collection, getDocs } from 'firebase/firestore';
+import { db } from '../firebase/config';
 import { isWorkday, formatDate } from './dateUtils';
 
 // Prepare attendance data for a specific date
 // marking employees who didn't check in as "Tidak Hadir"
 export const prepareAttendanceData = async (attendanceRecords, date) => {
   try {
-    // Get all employees
-    const employees = await getEmployees();
+    // Get all employees directly from Firestore
+    const employeesSnapshot = await getDocs(collection(db, "employees"));
+    const employees = [];
+    employeesSnapshot.forEach((doc) => {
+      employees.push({
+        id: doc.id,
+        ...doc.data()
+      });
+    });
     
     // Create a map of existing attendance records
     const attendanceMap = {};
@@ -43,14 +51,6 @@ export const prepareAttendanceData = async (attendanceRecords, date) => {
 
 // Check if the employee can check in
 export const canCheckIn = (employee, existingAttendance) => {
-  // Check if today is a workday
-  if (!isWorkday()) {
-    return {
-      canCheckIn: false,
-      message: "Tidak dapat absen masuk pada akhir pekan atau hari libur."
-    };
-  }
-  
   // Check if the employee already checked in today
   const today = formatDate(new Date());
   const todayAttendance = existingAttendance.find(
@@ -72,14 +72,6 @@ export const canCheckIn = (employee, existingAttendance) => {
 
 // Check if the employee can check out
 export const canCheckOut = (employee, existingAttendance) => {
-  // Check if today is a workday
-  if (!isWorkday()) {
-    return {
-      canCheckOut: false,
-      message: "Tidak dapat absen pulang pada akhir pekan atau hari libur."
-    };
-  }
-  
   // Check if the employee has checked in today
   const today = formatDate(new Date());
   const todayAttendance = existingAttendance.find(
@@ -129,6 +121,8 @@ export const countAttendanceStats = (attendanceData) => {
         stats.veryLate++;
         break;
       case "Tidak Hadir":
+      case null:
+      case undefined:
         stats.absent++;
         break;
       default:
@@ -142,7 +136,7 @@ export const countAttendanceStats = (attendanceData) => {
 // Calculate attendance percentage for an employee
 export const calculateAttendancePercentage = (employeeAttendance, totalWorkDays) => {
   const presentDays = employeeAttendance.filter(record => 
-    record.status !== "Tidak Hadir"
+    record.status !== "Tidak Hadir" && record.status !== null && record.status !== undefined
   ).length;
   
   return (presentDays / totalWorkDays) * 100;

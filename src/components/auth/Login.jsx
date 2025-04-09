@@ -194,7 +194,7 @@ const Login = () => {
         
         <div className="text-center mt-4">
           <p className="text-sm text-gray-600">
-            © {new Date().getFullYear()} PT. SUCOFINDO Jambi. All rights reserved.
+            © {new Date().getFullYear()}  All rights reserved.
           </p>
         </div>
       </div>

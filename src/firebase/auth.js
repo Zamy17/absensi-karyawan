@@ -2,24 +2,62 @@
 import { 
   signInWithEmailAndPassword, 
   signOut as firebaseSignOut,
-  onAuthStateChanged,
-  getAuth
+  onAuthStateChanged
 } from "firebase/auth";
-import { auth, db } from "./config";
+import { auth } from "./config";
 import { doc, getDoc, setDoc } from "firebase/firestore";
+import { db } from "./config";
 
-// Sign in with email and password
+// Fungsi helper untuk menentukan peran berdasarkan email
+const getRoleFromEmail = (email) => {
+  if (!email) return null;
+  
+  const emailLower = email.toLowerCase();
+  if (emailLower.includes('admin')) {
+    return 'admin';
+  } else if (emailLower.includes('guard') || emailLower.includes('satpam')) {
+    return 'guard';
+  }
+  return null;
+};
+
+// Login dengan email dan password
 export const signIn = async (email, password) => {
   try {
     const userCredential = await signInWithEmailAndPassword(auth, email, password);
-    return userCredential.user;
+    const user = userCredential.user;
+    
+    // Coba dapatkan peran dari Firestore
+    try {
+      const role = await getUserRole(user.uid);
+      return { user, role };
+    } catch (err) {
+      // Jika Firestore gagal, gunakan peran berbasis email sebagai fallback
+      console.log("Menggunakan peran berbasis email karena:", err.message);
+      const emailRole = getRoleFromEmail(email);
+      
+      // Jika ini login pertama, coba buat dokumen pengguna dengan peran berbasis email
+      try {
+        await setDoc(doc(db, "users", user.uid), {
+          email: user.email,
+          role: emailRole,
+          name: email.split('@')[0], // Nama dasar dari email
+          createdAt: new Date()
+        }, { merge: true });
+        
+        console.log("Berhasil membuat/memperbarui dokumen pengguna dengan peran berbasis email");
+      } catch (docErr) {
+        console.warn("Tidak dapat membuat/memperbarui dokumen pengguna:", docErr.message);
+      }
+      
+      return { user, role: emailRole };
+    }
   } catch (error) {
-    console.error("Sign in error details:", error.code, error.message);
     throw new Error(error.message);
   }
 };
 
-// Sign out
+// Sign out / Logout
 export const signOut = async () => {
   try {
     await firebaseSignOut(auth);
@@ -29,91 +67,45 @@ export const signOut = async () => {
   }
 };
 
-// Determine role based on email pattern
-const getRoleFromEmail = (email) => {
-  if (!email) return "user";
-  
-  email = email.toLowerCase();
-  
-  if (email.includes("admin")) {
-    return "admin";
-  } else if (email.includes("satpam") || email.includes("guard")) {
-    return "guard";
-  } else {
-    return "user";
-  }
-};
-
-// Get user role from Firestore with fallback strategy
+// Mendapatkan peran pengguna dari Firestore
 export const getUserRole = async (uid) => {
-  console.log("Getting role for user:", uid);
-  
   try {
-    // First, verify the user is authenticated
-    const currentUser = auth.currentUser;
-    if (!currentUser) {
-      console.warn("No authenticated user found when getting role");
-      return "user";
-    }
-    
-    console.log("Auth state:", currentUser.uid === uid ? "UIDs match" : "UID mismatch");
-    
-    // Get email-based role as fallback
-    const emailBasedRole = getRoleFromEmail(currentUser.email);
-    console.log("Email-based role fallback:", emailBasedRole);
-    
-    // Try to get the user document
     const docRef = doc(db, "users", uid);
-    console.log("Attempting to fetch document from:", `users/${uid}`);
+    const docSnap = await getDoc(docRef);
     
-    try {
-      const docSnap = await getDoc(docRef);
-      
-      if (docSnap.exists()) {
-        console.log("User document exists, role:", docSnap.data().role);
-        return docSnap.data().role;
-      } else {
-        console.warn("User document not found for uid:", uid);
-        
-        // Try to create a user document based on email role
-        try {
-          await setDoc(docRef, {
-            role: emailBasedRole,
-            email: currentUser.email,
-            createdAt: new Date()
-          });
-          console.log("Created user document with role:", emailBasedRole);
-        } catch (writeError) {
-          console.error("Failed to create user document:", writeError);
+    if (docSnap.exists()) {
+      return docSnap.data().role;
+    } else {
+      // Jika dokumen pengguna tidak ditemukan, periksa apakah email pengguna saat ini menunjukkan peran
+      const currentUser = auth.currentUser;
+      if (currentUser && currentUser.uid === uid) {
+        const emailRole = getRoleFromEmail(currentUser.email);
+        if (emailRole) {
+          console.log("Dokumen pengguna tidak ditemukan. Menggunakan peran berbasis email:", emailRole);
+          return emailRole;
         }
-        
-        return emailBasedRole;
-      }
-    } catch (docError) {
-      console.error("Document fetch error:", docError.code, docError.message);
-      
-      // If it's a permissions error, use email-based role
-      if (docError.code === "permission-denied") {
-        console.warn("Permission denied when reading user document. Using email-based role.");
-        return emailBasedRole;
       }
       
-      throw docError;
+      throw new Error("Pengguna tidak ditemukan dalam database");
     }
   } catch (error) {
-    console.error("Error in getUserRole:", error.code, error.message);
+    console.error("Error mendapatkan peran pengguna:", error.message);
     
-    // Try to determine role from email as last resort
-    if (auth.currentUser && auth.currentUser.email) {
-      return getRoleFromEmail(auth.currentUser.email);
+    // Fallback ke peran berbasis email jika tidak dapat mengakses Firestore
+    const currentUser = auth.currentUser;
+    if (currentUser && currentUser.uid === uid) {
+      const emailRole = getRoleFromEmail(currentUser.email);
+      if (emailRole) {
+        console.log("Akses ditolak saat membaca dokumen pengguna. Menggunakan peran berbasis email.");
+        return emailRole;
+      }
     }
     
-    // Default fallback
-    return "user";
+    throw new Error(error.message);
   }
 };
 
-// Check if user is authenticated
+// Memeriksa apakah pengguna terautentikasi
 export const getCurrentUser = () => {
   return new Promise((resolve, reject) => {
     const unsubscribe = onAuthStateChanged(

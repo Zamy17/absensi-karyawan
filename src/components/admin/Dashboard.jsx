@@ -1,66 +1,97 @@
 // src/components/admin/Dashboard.jsx
 import React, { useState, useEffect } from 'react';
-import { getAttendanceByDate, getEmployees } from '../../firebase/firestore';
-import { getCurrentDate, isWorkday } from '../../utils/dateUtils';
-import { countAttendanceStats } from '../../utils/attendanceHelpers';
+import { collection, query, where, getDocs } from 'firebase/firestore';
+import { db } from '../../firebase/config';
 import Layout from '../layout/Layout';
 
 const Dashboard = () => {
+  // State untuk menyimpan data
   const [loading, setLoading] = useState(true);
-  const [todayAttendance, setTodayAttendance] = useState([]);
-  const [attendanceStats, setAttendanceStats] = useState({
+  const [employees, setEmployees] = useState([]);
+  const [attendanceRecords, setAttendanceRecords] = useState([]);
+  const [processedRecords, setProcessedRecords] = useState([]);
+  const [stats, setStats] = useState({
     total: 0,
     onTime: 0,
     late: 0,
     veryLate: 0,
     absent: 0
   });
-  const [totalEmployees, setTotalEmployees] = useState(0);
-
+  const [currentTime, setCurrentTime] = useState('');
+  const [currentDate, setCurrentDate] = useState('');
+  
+  // Fungsi untuk mendapatkan tanggal saat ini dalam format YYYY-MM-DD
+  const getCurrentDate = () => {
+    const now = new Date();
+    const year = now.getFullYear();
+    const month = String(now.getMonth() + 1).padStart(2, '0');
+    const day = String(now.getDate()).padStart(2, '0');
+    return `${year}-${month}-${day}`;
+  };
+  
+  // Fungsi untuk mendapatkan waktu saat ini dalam format HH:MM:SS
+  const getCurrentTime = () => {
+    return new Date().toTimeString().split(' ')[0];
+  };
+  
+  // Update waktu setiap menit
+  useEffect(() => {
+    const updateDateTime = () => {
+      setCurrentTime(getCurrentTime());
+      setCurrentDate(getCurrentDate());
+    };
+    
+    // Update awal
+    updateDateTime();
+    
+    const timer = setInterval(updateDateTime, 60000);
+    return () => clearInterval(timer);
+  }, []);
+  
+  // Mengambil data saat komponen dimuat
   useEffect(() => {
     const fetchData = async () => {
       try {
         setLoading(true);
         
-        // Get today's date
-        const today = getCurrentDate();
+        // 1. Ambil semua data karyawan
+        const employeesCollection = collection(db, "employees");
+        const employeesSnapshot = await getDocs(employeesCollection);
+        const employeesList = [];
         
-        // Get all employees
-        const employees = await getEmployees();
-        setTotalEmployees(employees.length);
-        
-        // Get today's attendance
-        const attendance = await getAttendanceByDate(today);
-        setTodayAttendance(attendance);
-        
-        // Count statistics
-        if (isWorkday()) {
-          // Create complete attendance list with absent employees
-          const completeAttendance = [];
-          
-          employees.forEach(employee => {
-            const employeeAttendance = attendance.find(
-              record => record.employeeId === employee.id
-            );
-            
-            if (employeeAttendance) {
-              completeAttendance.push(employeeAttendance);
-            } else {
-              completeAttendance.push({
-                employeeId: employee.id,
-                employeeName: employee.name,
-                position: employee.position,
-                date: today,
-                status: "Tidak Hadir"
-              });
-            }
+        employeesSnapshot.forEach((doc) => {
+          employeesList.push({
+            id: doc.id,
+            ...doc.data()
           });
-          
-          const stats = countAttendanceStats(completeAttendance);
-          setAttendanceStats(stats);
-        }
+        });
+        
+        setEmployees(employeesList);
+        
+        // 2. Ambil data absensi hari ini
+        const today = getCurrentDate();
+        const attendanceQuery = query(
+          collection(db, "attendance"),
+          where("date", "==", today)
+        );
+        
+        const attendanceSnapshot = await getDocs(attendanceQuery);
+        const attendanceList = [];
+        
+        attendanceSnapshot.forEach((doc) => {
+          attendanceList.push({
+            id: doc.id,
+            ...doc.data()
+          });
+        });
+        
+        setAttendanceRecords(attendanceList);
+        
+        // 3. Proses data untuk menambahkan karyawan yang tidak hadir
+        processAttendanceData(employeesList, attendanceList, today);
+        
       } catch (error) {
-        console.error("Error fetching dashboard data:", error);
+        console.error("Error saat mengambil data:", error);
       } finally {
         setLoading(false);
       }
@@ -69,7 +100,67 @@ const Dashboard = () => {
     fetchData();
   }, []);
   
-  // Stats card component
+  // Proses data absensi untuk menyertakan karyawan yang tidak hadir
+  const processAttendanceData = (employeesList, attendanceList, date) => {
+    // Buat map dari data absensi yang sudah ada berdasarkan ID karyawan
+    const attendanceMap = {};
+    
+    attendanceList.forEach(record => {
+      if (record.employeeId) {
+        attendanceMap[record.employeeId] = record;
+      }
+    });
+    
+    // Buat daftar absensi lengkap dengan karyawan yang tidak hadir
+    const completeAttendance = [];
+    
+    // Penghitung untuk statistik
+    let onTimeCount = 0;
+    let lateCount = 0;
+    let veryLateCount = 0;
+    let absentCount = 0;
+    
+    // Proses setiap karyawan
+    employeesList.forEach(employee => {
+      if (attendanceMap[employee.id]) {
+        // Karyawan memiliki data absensi untuk hari ini
+        const record = attendanceMap[employee.id];
+        
+        // Hitung berdasarkan status
+        if (record.status === "Tepat Waktu") onTimeCount++;
+        else if (record.status === "Terlambat") lateCount++;
+        else if (record.status === "Sangat Terlambat") veryLateCount++;
+        
+        completeAttendance.push(record);
+      } else {
+        // Karyawan tidak memiliki data absensi - tandai sebagai tidak hadir
+        absentCount++;
+        
+        const absentRecord = {
+          employeeId: employee.id,
+          employeeName: employee.name || "Tidak Diketahui",
+          position: employee.position || "Tidak Diketahui",
+          date: date,
+          status: "Tidak Hadir"
+        };
+        
+        completeAttendance.push(absentRecord);
+      }
+    });
+    
+    // Perbarui state dengan data yang sudah diproses dan statistik
+    setProcessedRecords(completeAttendance);
+    
+    setStats({
+      total: completeAttendance.length,
+      onTime: onTimeCount,
+      late: lateCount,
+      veryLate: veryLateCount,
+      absent: absentCount
+    });
+  };
+  
+  // Komponen kartu statistik
   const StatsCard = ({ title, value, color }) => (
     <div className={`bg-white border-l-4 ${color} rounded-md shadow-md p-4`}>
       <div className="text-sm font-medium text-gray-500">{title}</div>
@@ -80,13 +171,20 @@ const Dashboard = () => {
   return (
     <Layout>
       <div className="space-y-6">
-        <div>
-          <h1 className="text-2xl font-bold text-gray-900">
-            Admin Dashboard
-          </h1>
-          <p className="mt-1 text-gray-500">
-            Overview of today's attendance information
-          </p>
+        <div className="flex flex-col md:flex-row justify-between items-start md:items-center">
+          <div>
+            <h1 className="text-2xl font-bold text-gray-900">
+              Dashboard Admin
+            </h1>
+            <p className="mt-1 text-gray-500">
+              Ringkasan informasi absensi hari ini
+            </p>
+          </div>
+          <div className="mt-2 md:mt-0 bg-blue-50 px-4 py-2 rounded-lg">
+            <div className="text-sm text-gray-600">
+              {currentDate} | {currentTime}
+            </div>
+          </div>
         </div>
         
         {loading ? (
@@ -98,27 +196,27 @@ const Dashboard = () => {
             <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-5 gap-4">
               <StatsCard
                 title="Total Karyawan"
-                value={totalEmployees}
+                value={employees.length}
                 color="border-blue-500"
               />
               <StatsCard
                 title="Tepat Waktu"
-                value={attendanceStats.onTime}
+                value={stats.onTime}
                 color="border-green-500"
               />
               <StatsCard
                 title="Terlambat"
-                value={attendanceStats.late}
+                value={stats.late}
                 color="border-yellow-500"
               />
               <StatsCard
                 title="Sangat Terlambat"
-                value={attendanceStats.veryLate}
+                value={stats.veryLate}
                 color="border-orange-500"
               />
               <StatsCard
                 title="Tidak Hadir"
-                value={attendanceStats.absent}
+                value={stats.absent}
                 color="border-red-500"
               />
             </div>
@@ -126,7 +224,7 @@ const Dashboard = () => {
             <div className="bg-white shadow-md rounded-lg overflow-hidden">
               <div className="px-6 py-4 border-b border-gray-200">
                 <h2 className="text-lg font-medium text-gray-900">
-                  Absensi Hari Ini ({getCurrentDate()})
+                  Absensi Hari Ini ({currentDate})
                 </h2>
               </div>
               
@@ -152,17 +250,15 @@ const Dashboard = () => {
                     </tr>
                   </thead>
                   <tbody className="bg-white divide-y divide-gray-200">
-                    {todayAttendance.length === 0 ? (
+                    {processedRecords.length === 0 ? (
                       <tr>
                         <td colSpan="5" className="px-6 py-4 text-center text-gray-500">
-                          {isWorkday() 
-                            ? "Belum ada data absensi hari ini" 
-                            : "Hari ini adalah hari libur/akhir pekan, tidak ada absensi"}
+                          Belum ada data absensi hari ini
                         </td>
                       </tr>
                     ) : (
-                      todayAttendance.map((record) => (
-                        <tr key={record.id || record.employeeId}>
+                      processedRecords.map((record, index) => (
+                        <tr key={record.id || index}>
                           <td className="px-6 py-4 whitespace-nowrap">
                             {record.employeeName}
                           </td>
