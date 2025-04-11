@@ -160,7 +160,7 @@ const Login = () => {
             Sistem Absensi Karyawan
           </h2>
           <h3 className="text-center text-xl font-bold text-blue-600 mt-1">
-            PT. SUCOFINDO cabang Jambi
+            PT. SUCOFINDO CABANG JAMBI
           </h3>
           
           <p className="mt-3 text-center text-sm text-gray-600">
@@ -300,7 +300,7 @@ const Login = () => {
         {/* Footer */}
         <div className="text-center mt-4">
           <p className="text-sm text-gray-600">
-            © {new Date().getFullYear()} PT. SUCOFINDO cabang Jambi. All rights reserved.
+            © {new Date().getFullYear()} PT. SUCOFINDO CABANG JAMBI. All rights reserved.
           </p>
         </div>
       </div>
