@@ -5,7 +5,6 @@ import { getMonthName, getCurrentDate } from '../../utils/dateUtils';
 import { exportTopEmployeesToExcel } from '../../utils/excelExport';
 import Layout from '../layout/Layout';
 import Button from '../shared/Button';
-import DataTable from '../shared/DataTable';
 import { collection, getDocs, query, where, onSnapshot } from 'firebase/firestore';
 import { db } from '../../firebase/config';
 
@@ -17,7 +16,6 @@ const TopEmployees = () => {
   const [month, setMonth] = useState(new Date().getMonth() + 1); // 1-12
   const [isExporting, setIsExporting] = useState(false);
   const [showScoreInfo, setShowScoreInfo] = useState(false);
-  const [viewType, setViewType] = useState('table'); // 'table' or 'card'
   const [totalWorkers, setTotalWorkers] = useState(0);
   const [showAllEmployees, setShowAllEmployees] = useState(false); // Tambahkan state untuk toggle semua karyawan
   
@@ -226,11 +224,6 @@ const TopEmployees = () => {
   const toggleScoreInfo = () => {
     setShowScoreInfo(!showScoreInfo);
   };
-  
-  // Toggle view type
-  const toggleViewType = () => {
-    setViewType(viewType === 'table' ? 'card' : 'table');
-  };
 
   // Toggle show all employees
   const toggleShowAllEmployees = () => {
@@ -259,96 +252,6 @@ const TopEmployees = () => {
     if (rank <= 3) return 'text-white';      // Teks putih untuk 3 peringkat teratas
     return 'text-blue-800';                  // Default untuk peringkat lainnya
   };
-  
-  // Table columns
-  const columns = [
-    {
-      key: 'rank',
-      title: 'Peringkat',
-      render: (row, index) => {
-        // Pastikan peringkat selalu angka valid
-        const rankNumber = typeof index === 'number' ? index + 1 : 
-                          (row && row.rankIndex ? row.rankIndex : 1);
-        
-        return (
-          <div className="text-center">
-            <span className={`inline-flex items-center justify-center w-9 h-9 rounded-full font-bold text-lg
-              ${getRankBackgroundColor(rankNumber)} ${getRankTextColor(rankNumber)}
-              shadow-md transition-transform hover:scale-110`}>
-              {rankNumber}
-            </span>
-          </div>
-        );
-      }
-    },
-    {
-      key: 'name',
-      title: 'Nama Karyawan',
-      render: (row) => (
-        <div className="font-medium text-blue-800">{row.name || "-"}</div>
-      )
-    },
-    {
-      key: 'position',
-      title: 'Jabatan',
-      render: (row) => (
-        <div className="text-gray-600">{row.position || "-"}</div>
-      )
-    },
-    {
-      key: 'totalDaysPresent',
-      title: 'Total Hadir',
-      render: (row) => (
-        <div className="text-center font-medium text-blue-800 bg-blue-50 py-1 px-2 rounded">
-          {row.totalDaysPresent || 0} hari
-        </div>
-      )
-    },
-    {
-      key: 'attendance',
-      title: 'Kehadiran & Ketepatan',
-      render: (row) => (
-        <div className="space-y-1">
-          <div className="grid grid-cols-4 gap-1 text-xs text-center">
-            <div className="py-1 px-2 rounded bg-green-100 text-green-800">
-              <div className="font-bold">{row.onTime || 0}</div>
-              <div>Tepat</div>
-            </div>
-            <div className="py-1 px-2 rounded bg-yellow-100 text-yellow-800">
-              <div className="font-bold">{row.late || 0}</div>
-              <div>Terlambat</div>
-            </div>
-            <div className="py-1 px-2 rounded bg-red-100 text-red-800">
-              <div className="font-bold">{row.veryLate || 0}</div>
-              <div>Sgt Terlambat</div>
-            </div>
-            <div className="py-1 px-2 rounded bg-gray-100 text-gray-800">
-              <div className="font-bold">{row.absent || 0}</div>
-              <div>Tidak Hadir</div>
-            </div>
-          </div>
-        </div>
-      )
-    },
-    {
-      key: 'score',
-      title: 'Skor',
-      render: (row) => (
-        <div className="space-y-2">
-          <div className="font-bold text-lg">
-            {typeof row.score === 'number' ? row.score.toFixed(1) : '0.0'} poin
-          </div>
-          <div className="w-full bg-gray-200 rounded-full h-2.5">
-            <div 
-              className={`h-2.5 rounded-full ${getPercentageColor(row.percentage)}`} 
-              style={{ width: `${row.percentage || 0}%` }}>
-            </div>
-          </div>
-          <div className="text-xs text-gray-600">{row.percentage || 0}% dari maksimal</div>
-        </div>
-      )
-    }
-  ];
   
   // Render employee card view
   const renderEmployeeCards = () => {
@@ -478,8 +381,8 @@ const TopEmployees = () => {
     </div>
   );
   
-  // Table actions
-  const tableActions = (
+  // Table actions (renamed to just "actions" since there's no table anymore)
+  const actions = (
     <div className="flex flex-col md:flex-row gap-4 p-4">
       <div className="grid grid-cols-1 md:grid-cols-2 gap-4 flex-grow">
         <div>
@@ -519,14 +422,6 @@ const TopEmployees = () => {
       </div>
       
       <div className="flex items-end space-x-2 flex-wrap">
-        <Button
-          onClick={toggleViewType}
-          variant="light"
-          className="whitespace-nowrap"
-        >
-          {viewType === 'table' ? 'Tampilan Kartu' : 'Tampilan Tabel'}
-        </Button>
-        
         <Button
           onClick={toggleShowAllEmployees}
           variant="light"
@@ -671,7 +566,7 @@ const TopEmployees = () => {
         )}
         
         <div className="bg-white rounded-xl shadow-md overflow-hidden">
-          {tableActions}
+          {actions}
           
           <div className="p-4">
             {loading ? (
@@ -681,35 +576,6 @@ const TopEmployees = () => {
                   <p className="text-gray-500">Memuat data karyawan...</p>
                 </div>
               </div>
-            ) : viewType === 'table' ? (
-              // Persiapan data dengan ranking untuk DataTable
-              (() => {
-                // Gunakan semua karyawan atau hanya 10 teratas berdasarkan toggle
-                const displayEmployees = showAllEmployees ? topEmployees : topEmployees.slice(0, 10);
-                
-                const employeesWithRanking = displayEmployees.map((employee, idx) => ({
-                  ...employee,
-                  rankIndex: idx + 1,
-                  // Pastikan semua nilai numerik valid
-                  onTime: employee.onTime || 0,
-                  late: employee.late || 0,
-                  veryLate: employee.veryLate || 0,
-                  absent: employee.absent || 0,
-                  score: employee.score || 0,
-                  percentage: employee.percentage || 0,
-                  totalDaysPresent: employee.totalDaysPresent || 0
-                }));
-                
-                return (
-                  <DataTable
-                    columns={columns}
-                    data={employeesWithRanking}
-                    loading={loading}
-                    pagination={false}
-                    emptyMessage="Tidak ada data untuk periode yang dipilih"
-                  />
-                );
-              })()
             ) : (
               renderEmployeeCards()
             )}
