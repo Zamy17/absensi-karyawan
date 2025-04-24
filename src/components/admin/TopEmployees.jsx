@@ -1,12 +1,21 @@
 // src/components/admin/TopEmployees.jsx
 import React, { useState, useEffect } from 'react';
 import { getEmployees } from '../../firebase/firestore';
-import { getMonthName, getCurrentDate } from '../../utils/dateUtils';
+import { getCurrentDate } from '../../utils/dateUtils';
 import { exportTopEmployeesToExcel } from '../../utils/excelExport';
 import Layout from '../layout/Layout';
 import Button from '../shared/Button';
 import { collection, getDocs, query, where, onSnapshot } from 'firebase/firestore';
 import { db } from '../../firebase/config';
+
+// Function to get Indonesian month names
+const getIndonesianMonthName = (month) => {
+  const monthNames = [
+    "Januari", "Februari", "Maret", "April", "Mei", "Juni",
+    "Juli", "Agustus", "September", "Oktober", "November", "Desember"
+  ];
+  return monthNames[month - 1]; // Adjusting for 1-based month index
+};
 
 const TopEmployees = () => {
   const [topEmployees, setTopEmployees] = useState([]);
@@ -29,12 +38,12 @@ const TopEmployees = () => {
     yearOptions.push(y);
   }
   
-  // Generate month options
+  // Generate month options with Indonesian names
   const monthOptions = [];
   for (let m = 1; m <= 12; m++) {
     monthOptions.push({
       value: m,
-      label: getMonthName(m)
+      label: getIndonesianMonthName(m)
     });
   }
   
@@ -202,7 +211,7 @@ const TopEmployees = () => {
       setError(null);
       
       const dataToExport = showAllEmployees ? topEmployees : topEmployees.slice(0, 10);
-      const monthName = getMonthName(month);
+      const monthName = getIndonesianMonthName(month);
       await exportTopEmployeesToExcel(
         dataToExport,
         month,
@@ -361,7 +370,7 @@ const TopEmployees = () => {
       
       <div className="bg-white rounded-xl shadow-md p-5 border-l-4 border-green-500">
         <div className="text-sm font-medium text-gray-500">Bulan</div>
-        <div className="mt-1 text-3xl font-semibold">{getMonthName(month)}</div>
+        <div className="mt-1 text-3xl font-semibold">{getIndonesianMonthName(month)}</div>
       </div>
       
       <div className="bg-white rounded-xl shadow-md p-5 border-l-4 border-yellow-500">
