@@ -1,7 +1,11 @@
-// src/App.jsx - dengan import alternatif
+// src/App.jsx
 import React from 'react';
 import { BrowserRouter as Router, Routes, Route, Navigate } from 'react-router-dom';
 import { AuthProvider } from './contexts/AuthContext';
+
+// Komponen PWA
+import InstallPWA from './components/InstallPWA';
+import OfflineIndicator from './components/OfflineIndicator';
 
 // Auth components
 import Login from './components/auth/Login';
@@ -21,7 +25,6 @@ import CheckOutAttendance from './components/guard/CheckOutAttendance';
 import DailyReport from './components/guard/DailyReport';
 import GuardEmployeeManagement from './components/guard/EmployeeManagement';
 
-// ===== OPSI 1: Gunakan deteksi perangkat sederhana tanpa file terpisah =====
 function App() {
   // Deteksi mobile sederhana
   const [isMobile, setIsMobile] = React.useState(false);
@@ -45,6 +48,10 @@ function App() {
   return (
     <Router>
       <AuthProvider>
+        {/* Add PWA components */}
+        <InstallPWA />
+        <OfflineIndicator />
+        
         <Routes>
           {/* Public routes */}
           <Route path="/login" element={<Login />} />
@@ -135,7 +142,7 @@ const MobileLayout = ({ children, currentPath }) => {
   );
 };
 
-// Komponen-komponen mobile sederhana tanpa perlu import
+// Mobile components (unchanged from original App.jsx)
 const MobileGuardDashboard = () => {
   return (
     <MobileLayout currentPath="/guard/dashboard">
@@ -156,7 +163,6 @@ const MobileCheckIn = () => {
           </p>
         </div>
         
-        {/* Gunakan komponen CheckInAttendance yang sudah ada */}
         <CheckInAttendance />
       </div>
     </MobileLayout>
@@ -175,7 +181,6 @@ const MobileCheckOut = () => {
           </p>
         </div>
         
-        {/* Gunakan komponen CheckOutAttendance yang sudah ada */}
         <CheckOutAttendance />
       </div>
     </MobileLayout>
@@ -194,7 +199,6 @@ const MobileDailyReport = () => {
           </p>
         </div>
         
-        {/* Gunakan komponen DailyReport yang sudah ada */}
         <DailyReport />
       </div>
     </MobileLayout>

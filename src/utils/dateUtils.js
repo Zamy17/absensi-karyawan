@@ -124,7 +124,7 @@ export const calculateAttendanceStatus = (checkInTime) => {
   const [hours, minutes] = checkInTime.split(':').map(Number);
   const totalMinutes = hours * 60 + minutes;
   
-  // 08:10 in minutes = 480 minutes
+  // 08:00 in minutes = 480 minutes
   // 08:30 in minutes = 510 minutes
   if (totalMinutes <= 480) {
     return "Tepat Waktu";

@@ -183,7 +183,7 @@ export const recordCheckIn = async (employeeId, guardId) => {
     const checkInMinute = now.getMinutes();
     const totalMinutes = checkInHour * 60 + checkInMinute;
     
-    if (totalMinutes > 8 * 60 + 10 && totalMinutes <= 8 * 60 + 30) {
+    if (totalMinutes > 8 * 60 && totalMinutes <= 8 * 60 + 30) {
       status = "Terlambat";
     } else if (totalMinutes > 8 * 60 + 30) {
       status = "Sangat Terlambat";
