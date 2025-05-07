@@ -104,7 +104,13 @@ const CheckOutAttendance = () => {
       try {
         const employeesData = await getEmployees();
         setEmployees(employeesData);
-        setFilteredEmployees(employeesData);
+        
+        // Urutkan semua karyawan berdasarkan abjad (A-Z)
+        const sortedEmployees = [...employeesData].sort((a, b) => 
+          a.name.localeCompare(b.name)
+        );
+        
+        setFilteredEmployees(sortedEmployees);
       } catch (error) {
         console.error("Error fetching employees:", error);
       }
@@ -113,14 +119,21 @@ const CheckOutAttendance = () => {
     fetchEmployees();
   }, [currentUser]);
   
-  // Filter employees based on search term
+  // Filter employees based on search term and always sort alphabetically
   useEffect(() => {
     if (searchTerm.trim() === '') {
-      setFilteredEmployees(employees);
-    } else {
-      const filtered = employees.filter(
-        employee => employee.name.toLowerCase().includes(searchTerm.toLowerCase())
+      // Jika tidak ada pencarian, tampilkan semua karyawan yang diurutkan secara alfabetis
+      const sortedEmployees = [...employees].sort((a, b) => 
+        a.name.localeCompare(b.name)
       );
+      
+      setFilteredEmployees(sortedEmployees);
+    } else {
+      // Jika ada pencarian, filter berdasarkan pencarian dan urutkan secara alfabetis
+      const filtered = employees
+        .filter(employee => employee.name.toLowerCase().includes(searchTerm.toLowerCase()))
+        .sort((a, b) => a.name.localeCompare(b.name));
+        
       setFilteredEmployees(filtered);
     }
   }, [searchTerm, employees]);
@@ -302,6 +315,9 @@ const CheckOutAttendance = () => {
         <div className="flex justify-between items-center">
           <div className="text-sm font-medium">
             Data absensi untuk tanggal: <span className="text-blue-600">{currentDateString}</span>
+          </div>
+          <div className="text-sm font-medium text-blue-600">
+            Menampilkan karyawan diurutkan dari A-Z
           </div>
         </div>
         
